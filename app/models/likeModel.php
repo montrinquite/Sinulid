@@ -4,7 +4,7 @@ require_once __DIR__ . '/Model.php';
 class LikeModel extends Model {
 
     public function add(int $postId, int $userId): bool {
-        $stmt = $this->db->prepare(
+        $stmt = $this->db()->prepare(
             'INSERT IGNORE INTO likes (post_id, user_id) VALUES (:post_id, :user_id)'
         );
         $stmt -> execute([':post_id' => $postId, ':user_id' => $userId]);
