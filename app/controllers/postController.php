@@ -16,7 +16,10 @@ class PostController extends Controller
         $this->likes    = new LikeModel();
     }
 
+<<<<<<< HEAD
     /** GET / : the feed, newest first */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function index(): void
     {
         $total = $this->posts->count();
@@ -32,7 +35,10 @@ class PostController extends Controller
         ], 'Home');
     }
 
+<<<<<<< HEAD
     /** POST /posts : create a post */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function store(): void
     {
         $user = $this->requireAuth();
@@ -49,7 +55,10 @@ class PostController extends Controller
         $this->redirect('/');
     }
 
+<<<<<<< HEAD
     /** GET /posts/{id} : one post with its comments */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function show(int $id): void
     {
         $post = $this->posts->findById($id);
@@ -68,14 +77,20 @@ class PostController extends Controller
         ], 'Post by ' . $post['username']);
     }
 
+<<<<<<< HEAD
     /** GET /posts/{id}/edit */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function editPost(int $id): void
     {
         $post = $this->ownedPost($id);
         $this->render('posts/edit', ['post' => $post], 'Edit post');
     }
 
+<<<<<<< HEAD
     /** POST /posts/{id}/update */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function updPost(int $id): void
     {
         $user = $this->requireAuth();
@@ -93,7 +108,10 @@ class PostController extends Controller
         $this->redirect("/posts/$id");
     }
 
+<<<<<<< HEAD
     /** POST /posts/{id}/delete */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function delPost(int $id): void
     {
         $user = $this->requireAuth();
@@ -105,9 +123,12 @@ class PostController extends Controller
         $this->redirect('/');
     }
 
+<<<<<<< HEAD
     /* ---------- helpers ---------- */
 
     /** Logged in + the post exists + it belongs to this user, else stop. */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     private function ownedPost(int $id): array
     {
         $user = $this->requireAuth();
@@ -133,7 +154,10 @@ class PostController extends Controller
         return [];
     }
 
+<<<<<<< HEAD
     /** Ids of the given posts that the current user has liked. */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     private function likedIds(array $posts): array
     {
         $user = auth_user();

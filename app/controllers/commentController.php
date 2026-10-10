@@ -13,7 +13,10 @@ class CommentController extends Controller
         $this->posts    = new PostModel();
     }
 
+<<<<<<< HEAD
     /** POST /posts/{id}/comments : add a comment */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function comment(int $postId): void
     {
         $user = $this->requireAuth();
@@ -34,14 +37,20 @@ class CommentController extends Controller
         $this->redirect("/posts/$postId");
     }
 
+<<<<<<< HEAD
     /** GET /comments/{id}/edit */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function editComm(int $id): void
     {
         $comment = $this->ownedComment($id);
         $this->render('comments/edit', ['comment' => $comment], 'Edit comment');
     }
 
+<<<<<<< HEAD
     /** POST /comments/{id}/update */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function updComm(int $id): void
     {
         $user = $this->requireAuth();
@@ -59,7 +68,10 @@ class CommentController extends Controller
         $this->redirect('/posts/' . $comment['post_id']);
     }
 
+<<<<<<< HEAD
     /** POST /comments/{id}/delete */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function delComm(int $id): void
     {
         $user = $this->requireAuth();
@@ -71,9 +83,12 @@ class CommentController extends Controller
         $this->redirect('/posts/' . $comment['post_id']);
     }
 
+<<<<<<< HEAD
     /* ---------- helpers ---------- */
 
     /** Logged in + the comment exists + it belongs to this user, else stop. */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     private function ownedComment(int $id): array
     {
         $user    = $this->requireAuth();

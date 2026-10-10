@@ -9,21 +9,30 @@ class AuthController extends Controller
         $this->users = new UserModel();
     }
 
+<<<<<<< HEAD
     /** GET /login */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function showLogin(): void
     {
         $this->guestOnly();
         $this->render('auth/login', [], 'Log in');
     }
 
+<<<<<<< HEAD
     /** GET /register */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function showReg(): void
     {
         $this->guestOnly();
         $this->render('auth/register', [], 'Register');
     }
 
+<<<<<<< HEAD
     /** POST /register */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function register(): void
     {
         $this->guestOnly();
@@ -61,14 +70,20 @@ class AuthController extends Controller
             $this->backWithErrors('/register', $errors, ['username' => $username, 'email' => $email]);
         }
 
+<<<<<<< HEAD
         // The model stores whatever hash it is given, so hash here.
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
         $this->users->create($username, $email, password_hash($password, PASSWORD_DEFAULT));
 
         $this->flash('success', 'Account created. You can log in now.');
         $this->redirect('/login');
     }
 
+<<<<<<< HEAD
     /** POST /login */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function login(): void
     {
         $this->guestOnly();
@@ -80,12 +95,19 @@ class AuthController extends Controller
 
         $user = $this->users->findByEmail($email);
 
+<<<<<<< HEAD
         // One message for "no such user" and "wrong password" on purpose.
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
         if ($user === null || !password_verify($password, $user['password_hash'])) {
             $this->backWithErrors('/login', ['login' => 'Invalid email or password.'], ['email' => $email]);
         }
 
+<<<<<<< HEAD
         session_regenerate_id(true); // stops session fixation
+=======
+        session_regenerate_id(true); 
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
         $_SESSION['user_id']  = (int) $user['id'];
         $_SESSION['username'] = $user['username'];
 
@@ -93,7 +115,10 @@ class AuthController extends Controller
         $this->redirect('/');
     }
 
+<<<<<<< HEAD
     /** POST /logout */
+=======
+>>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function logout(): void
     {
         $this->verifyCsrf();
