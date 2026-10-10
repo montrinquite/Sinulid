@@ -1,100 +1,94 @@
 <?php
 
-require_once __DIR__ . '/../models/Comment.php';
-
-class CommentController
+class CommentController extends Controller
 {
-    private $commentModel;
+    private const MAX_LEN = 500;
+
+    private CommentModel $comments;
+    private PostModel $posts;
 
     public function __construct()
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        $this->commentModel = new Comment();
+        $this->comments = new CommentModel();
+        $this->posts    = new PostModel();
     }
 
-    /** GET /post/{id}/comments : show all comments of a post */
-    public function index($postId)
+    public function comment(int $postId): void
     {
-        $comments = $this->commentModel->getByPost((int) $postId);
-        $this->respond(['comments' => $comments]);
+        $user = $this->requireAuth();
+        $this->verifyCsrf();
+
+        if ($this->posts->getOwnerId($postId) === null) {
+            $this->abort(404, 'Post not found.');
+        }
+
+        $content = $this->input('content');
+        $errors  = $this->validate($content);
+        if ($errors) {
+            $this->backWithErrors("/posts/$postId", $errors, ['content' => $content]);
+        }
+
+        $this->comments->create($postId, $user['id'], $content);
+        $this->flash('success', 'Comment added.');
+        $this->redirect("/posts/$postId");
     }
 
-    /** POST /post/{id}/comments : add a comment */
-    public function store($postId)
+    public function editComm(int $id): void
     {
-        $userId = $this->requireLogin();
-        $body   = trim($_POST['body'] ?? '');
-
-        if ($body === '') {
-            return $this->respond(['error' => 'Comment cannot be empty.'], 422);
-        }
-        if (mb_strlen($body) > 500) {
-            return $this->respond(['error' => 'Comment is too long (max 500).'], 422);
-        }
-
-        $id = $this->commentModel->create((int) $postId, $userId, $body);
-
-        $this->respond(['message' => 'Comment added.', 'id' => $id], 201);
+        $comment = $this->ownedComment($id);
+        $this->render('comments/edit', ['comment' => $comment], 'Edit comment');
     }
 
-    /** POST /comment/{id}/update : edit own comment */
-    public function update($commentId)
+    public function updComm(int $id): void
     {
-        $userId  = $this->requireLogin();
-        $comment = $this->commentModel->find((int) $commentId);
+        $user = $this->requireAuth();
+        $this->verifyCsrf();
+        $comment = $this->ownedComment($id);
 
-        if (!$comment) {
-            return $this->respond(['error' => 'Comment not found.'], 404);
-        }
-        if ((int) $comment['user_id'] !== $userId) {
-            return $this->respond(['error' => 'Not allowed.'], 403);
-        }
-
-        $body = trim($_POST['body'] ?? '');
-        if ($body === '' || mb_strlen($body) > 500) {
-            return $this->respond(['error' => 'Invalid comment text.'], 422);
+        $content = $this->input('content');
+        $errors  = $this->validate($content);
+        if ($errors) {
+            $this->backWithErrors("/comments/$id/edit", $errors, ['content' => $content]);
         }
 
-        $this->commentModel->update((int) $commentId, $body);
-        $this->respond(['message' => 'Comment updated.']);
+        $this->comments->update($id, $user['id'], $content);
+        $this->flash('success', 'Comment updated.');
+        $this->redirect('/posts/' . $comment['post_id']);
     }
 
-    /** POST /comment/{id}/delete : delete own comment */
-    public function delete($commentId)
+    public function delComm(int $id): void
     {
-        $userId  = $this->requireLogin();
-        $comment = $this->commentModel->find((int) $commentId);
+        $user = $this->requireAuth();
+        $this->verifyCsrf();
+        $comment = $this->ownedComment($id);
 
-        if (!$comment) {
-            return $this->respond(['error' => 'Comment not found.'], 404);
-        }
-        if ((int) $comment['user_id'] !== $userId) {
-            return $this->respond(['error' => 'Not allowed.'], 403);
-        }
-
-        $this->commentModel->delete((int) $commentId);
-        $this->respond(['message' => 'Comment deleted.']);
+        $this->comments->delete($id, $user['id']);
+        $this->flash('success', 'Comment deleted.');
+        $this->redirect('/posts/' . $comment['post_id']);
     }
 
-    /* ---------- helpers ---------- */
-
-    /** Returns the logged-in user's id or stops with 401. */
-    private function requireLogin()
+    private function ownedComment(int $id): array
     {
-        if (empty($_SESSION['user_id'])) {
-            $this->respond(['error' => 'Please log in first.'], 401);
-            exit;
+        $user    = $this->requireAuth();
+        $comment = $this->comments->findById($id);
+
+        if ($comment === null) {
+            $this->abort(404, 'Comment not found.');
         }
-        return (int) $_SESSION['user_id'];
+        if ((int) $comment['user_id'] !== $user['id']) {
+            $this->abort(403, 'You can only change your own comments.');
+        }
+        return $comment;
     }
 
-    /** Sends a JSON response. Swap for a view() call if you render pages. */
-    private function respond(array $data, int $status = 200)
+    private function validate(string $content): array
     {
-        http_response_code($status);
-        header('Content-Type: application/json');
-        echo json_encode($data);
+        if ($content === '') {
+            return ['content' => 'Comment cannot be empty.'];
+        }
+        if (mb_strlen($content) > self::MAX_LEN) {
+            return ['content' => 'Comment is too long (max ' . self::MAX_LEN . ' characters).'];
+        }
+        return [];
     }
 }
