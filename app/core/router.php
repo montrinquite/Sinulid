@@ -1,32 +1,37 @@
 <?php
+declare(strict_types=1);
 
-//post
-$router -> get('/', [PostController::class, 'index']);
+final class Router
+{
+    private array $routes = [];
 
-$router -> post('/posts', [PostController::class, 'store']);
-$router -> get('/posts/{id}', [PostController::class, 'show']);
-$router -> get('/posts/{id}/edit', [PostController::class, 'editPost']);
-$router -> post('/posts/{id}/update', [PostController::class, 'updPost']);
-$router -> post('/posts/{id}/delete', [PostController::class, 'delPost']);
+    public function get(string $path, string $handler): void  { $this->add('GET', $path, $handler); }
+    public function post(string $path, string $handler): void { $this->add('POST', $path, $handler); }
 
-//auth
-$router -> get('/login', [AuthController::class, 'showLogin']);
-$router -> post('/login', [AuthController::class, 'login']);
-$router -> get('/register', [AuthController::class, 'showReg']);
-$router -> post('/register', [AuthController::class, 'Register']);
-$router -> post('/logout', [AuthController::class, 'logout']);
+    private function add(string $method, string $path, string $handler): void
+    {
+        $regex = '#^' . preg_replace('#\{(\w+)\}#', '(?P<$1>[^/]+)', $path) . '$#';
+        $this->routes[] = [$method, $regex, $handler];
+    }
 
-//profile
-$router -> get('/profile/edit', [ProfileController::class, 'profEdit']);
-$router -> post('/profile/edit', [ProfileController::class, 'profUpd']);
-$router -> post('/profile/{id}', [ProfileController::class, 'showProf']);
-$router -> get('/profile/password', [ProfileController::class, 'changePass']);
+    public function dispatch(string $method, string $uri): void
+    {
+        $path = '/' . trim(parse_url($uri, PHP_URL_PATH) ?? '/', '/');
+        $base = rtrim(BASE_URL, '/');
+        if ($base !== '' && str_starts_with($path, $base)) {
+            $path = substr($path, strlen($base)) ?: '/';
+        }
+        $path = '/' . trim($path, '/');
 
-//like
-$router -> post('/posts/{id}/like', [LikeController::class, 'likes']);
-
-//comment
-$router -> post('/posts/{id}/comments', [CommentController::class, 'comment']);
-$router -> post('/comments/{id}/delete', [CommentController::class, 'delComm']);
-$router -> get('/comments/{id}/edit', [CommentController::class, 'editComm']);
-$router -> post('/comments/{id}/update', [CommentController::class, 'updComm']);
+        foreach ($this->routes as [$m, $regex, $handler]) {
+            if ($m === $method && preg_match($regex, $path, $matches)) {
+                $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
+                [$class, $action] = explode('@', $handler);
+                (new $class())->$action(...array_values($params));
+                return;
+            }
+        }
+        http_response_code(404);
+        (new Controller())->view('errors/404', ['title' => 'Page not found']);
+    }
+}

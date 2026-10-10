@@ -1,108 +1,92 @@
 <?php
-/**
- * Base controller: rendering, redirects, auth guard, CSRF, flash messages.
- * Controllers call models and pass data to views. Views never query the DB.
- */
-abstract class Controller
+declare(strict_types=1);
+
+class Controller
 {
-    protected function render(string $view, array $data = [], string $title = 'Social App'): void
+    public function view(string $view, array $data = [], bool $layout = true): void
     {
-        // One-time session data: flash message, validation errors, old input
-        $data += [
-            'title'  => $title,
-            'flash'  => $this->pull('flash'),
-            'errors' => $this->pull('errors') ?? [],
-            'old'    => $this->pull('old') ?? [],
-        ];
- 
-        $this->include(APP . '/views/layouts/header.php', $data);
-        $this->include(APP . "/views/$view.php", $data);
-        $this->include(APP . '/views/layouts/footer.php', $data);
+        extract($data, EXTR_SKIP);
+        $currentUser = $this->currentUser();
+        $flash = $this->pullFlash();
+        $csrf = $this->csrfToken();
+        $suggested = ($layout && $currentUser) ? (new UserModel())->suggested((int)$currentUser['id'], 4) : [];
+        if ($layout) require BASE_PATH . '/app/views/layouts/header.php';
+        require BASE_PATH . "/app/views/{$view}.php";
+        if ($layout) require BASE_PATH . '/app/views/layouts/footer.php';
+    }
+
+    public function partial(string $view, array $data = []): string
+    {
+        extract($data, EXTR_SKIP);
+        $currentUser = $this->currentUser();
+        $csrf = $this->csrfToken();
+        ob_start();
+        require BASE_PATH . "/app/views/{$view}.php";
+        return (string)ob_get_clean();
     }
  
-    private function include(string $file, array $vars): void
+    public function isAjax(): bool
     {
-        extract($vars, EXTR_SKIP);
-        require $file;
+        return ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch';
     }
- 
-    protected function redirect(string $path): void
+
+    public function json(array $payload, int $status = 200): never
+    {
+        http_response_code($status);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    public function redirect(string $path): never
     {
         header('Location: ' . url($path));
         exit;
     }
- 
-    /** Redirect to the page the user came from (same site only). */
-    protected function redirectBack(string $fallback = '/'): void
+
+    // ---- Auth helpers ----
+    public function userId(): ?int { return isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null; }
+
+    public function currentUser(): ?array
     {
-        $ref = parse_url($_SERVER['HTTP_REFERER'] ?? '');
-        if (!empty($ref['path']) && ($ref['host'] ?? $_SERVER['HTTP_HOST']) === ($_SERVER['HTTP_HOST'] ?? '')) {
-            $path = $ref['path'] . (isset($ref['query']) ? '?' . $ref['query'] : '');
-            header('Location: ' . $path);
-            exit;
+        static $cache = null;
+        if ($cache === null && $this->userId()) {
+            $cache = (new UserModel())->findById($this->userId()) ?: false;
         }
-        $this->redirect($fallback);
+        return $cache ?: null;
     }
- 
-    protected function flash(string $type, string $message): void
+
+    public function requireAuth(bool $ajax = false): int
     {
-        $_SESSION['flash'] = ['type' => $type, 'message' => $message];
-    }
- 
-    protected function backWithErrors(string $path, array $errors, array $old = []): void
-    {
-        $_SESSION['errors'] = $errors;
-        $_SESSION['old']    = $old;
-        $this->redirect($path);
-    }
- 
-    private function pull(string $key): mixed
-    {
-        $value = $_SESSION[$key] ?? null;
-        unset($_SESSION[$key]);
-        return $value;
-    }
- 
-    protected function requireAuth(): array
-    {
-        $user = auth_user();
-        if ($user === null) {
-            $this->flash('error', 'Please log in first.');
+        if (!$this->userId() || !$this->currentUser()) {
+            session_unset();
+            if ($ajax) $this->json(['ok' => false, 'message' => 'Please log in first.'], 401);
             $this->redirect('/login');
         }
-        return $user;
+        return $this->userId();
     }
- 
-    protected function guestOnly(): void
+
+    public function requireGuest(): void
     {
-        if (auth_user() !== null) {
-            $this->redirect('/');
+        if ($this->userId()) $this->redirect('/');
+    }
+
+    public function csrfToken(): string
+    {
+        if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        return $_SESSION['csrf'];
+    }
+
+    public function verifyCsrf(bool $ajax = false): void
+    {
+        $sent = $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (!is_string($sent) || !hash_equals($_SESSION['csrf'] ?? '', $sent)) {
+            if ($ajax) $this->json(['ok' => false, 'message' => 'Invalid security token. Refresh the page.'], 419);
+            http_response_code(419);
+            exit('Invalid CSRF token.');
         }
     }
- 
-    protected function verifyCsrf(): void
-    {
-        $sent = $_POST['_csrf'] ?? '';
-        if (!is_string($sent) || !hash_equals(csrf_token(), $sent)) {
-            $this->abort(419, 'Your session expired. Please go back and try again.');
-        }
-    }
- 
-    protected function abort(int $code, string $message): void
-    {
-        http_response_code($code);
-        $this->render('errors/error', ['code' => $code, 'message' => $message], "Error $code");
-        exit;
-    }
- 
-    protected function input(string $key): string
-    {
-        $v = $_POST[$key] ?? '';
-        return is_string($v) ? trim($v) : '';
-    }
- 
-    protected function page(): int
-    {
-        return max(1, (int) ($_GET['page'] ?? 1));
-    }
+
+    public function flash(string $type, string $message): void { $_SESSION['flash'] = compact('type', 'message'); }
+    private function pullFlash(): ?array { $f = $_SESSION['flash'] ?? null; unset($_SESSION['flash']); return $f; }
 }

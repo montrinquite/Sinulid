@@ -1,100 +1,112 @@
 <?php
+declare(strict_types=1);
 
-require_once __DIR__ . '/../models/Comment.php';
-
-class CommentController
+class CommentController extends Controller
 {
-    private $commentModel;
+    private CommentModel $comments;
 
-    public function __construct()
+    public function __construct() { $this->comments = new CommentModel(); }
+
+    //GET comments
+    public function index(string $postId): void
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
+        $this->requireAuth(true);
+        $postId = (int)$postId;
+        if (!$this->comments->postExists($postId)) {
+            $this->json(['ok' => false, 'message' => 'Post not found.'], 404);
         }
-        $this->commentModel = new Comment();
+        $rows = array_map([$this, 'present'], $this->comments->getByPost($postId));
+        $this->json(['ok' => true, 'comments' => $rows, 'count' => count($rows)]);
     }
 
-    /** GET /post/{id}/comments : show all comments of a post */
-    public function index($postId)
+    // POST comments
+    public function store(string $postId): void
     {
-        $comments = $this->commentModel->getByPost((int) $postId);
-        $this->respond(['comments' => $comments]);
+        $userId = $this->requireAuth(true);
+        $this->verifyCsrf(true);
+        $postId = (int)$postId;
+
+        if (!$this->comments->postExists($postId)) {
+            $this->json(['ok' => false, 'message' => 'Post not found.'], 404);
+        }
+        $content = $this->validContent();
+
+        $id = $this->comments->create($postId, $userId, $content);
+        $this->json([
+            'ok'      => true,
+            'message' => 'Comment added.',
+            'comment' => $this->present($this->comments->find($id)),
+            'count'   => $this->comments->countByPost($postId),
+        ], 201);
     }
 
-    /** POST /post/{id}/comments : add a comment */
-    public function store($postId)
+    //update
+    public function update(string $id): void
     {
-        $userId = $this->requireLogin();
-        $body   = trim($_POST['body'] ?? '');
+        $userId = $this->requireAuth(true);
+        $this->verifyCsrf(true);
+        $comment = $this->ownedComment((int)$id, $userId);
+        $content = $this->validContent();
 
-        if ($body === '') {
-            return $this->respond(['error' => 'Comment cannot be empty.'], 422);
-        }
-        if (mb_strlen($body) > 500) {
-            return $this->respond(['error' => 'Comment is too long (max 500).'], 422);
-        }
-
-        $id = $this->commentModel->create((int) $postId, $userId, $body);
-
-        $this->respond(['message' => 'Comment added.', 'id' => $id], 201);
+        $this->comments->update((int)$comment['id'], $content);
+        $this->json([
+            'ok'      => true,
+            'message' => 'Comment updated.',
+            'comment' => $this->present($this->comments->find((int)$comment['id'])),
+        ]);
     }
 
-    /** POST /comment/{id}/update : edit own comment */
-    public function update($commentId)
+    //delete
+    public function destroy(string $id): void
     {
-        $userId  = $this->requireLogin();
-        $comment = $this->commentModel->find((int) $commentId);
+        $userId = $this->requireAuth(true);
+        $this->verifyCsrf(true);
+        $comment = $this->ownedComment((int)$id, $userId);
 
-        if (!$comment) {
-            return $this->respond(['error' => 'Comment not found.'], 404);
-        }
-        if ((int) $comment['user_id'] !== $userId) {
-            return $this->respond(['error' => 'Not allowed.'], 403);
-        }
-
-        $body = trim($_POST['body'] ?? '');
-        if ($body === '' || mb_strlen($body) > 500) {
-            return $this->respond(['error' => 'Invalid comment text.'], 422);
-        }
-
-        $this->commentModel->update((int) $commentId, $body);
-        $this->respond(['message' => 'Comment updated.']);
+        $this->comments->delete((int)$comment['id']);
+        $this->json([
+            'ok'      => true,
+            'message' => 'Comment deleted.',
+            'count'   => $this->comments->countByPost((int)$comment['post_id']),
+        ]);
     }
 
-    /** POST /comment/{id}/delete : delete own comment */
-    public function delete($commentId)
+    //helpers
+    private function ownedComment(int $id, int $userId): array
     {
-        $userId  = $this->requireLogin();
-        $comment = $this->commentModel->find((int) $commentId);
-
-        if (!$comment) {
-            return $this->respond(['error' => 'Comment not found.'], 404);
+        $comment = $this->comments->find($id);
+        if (!$comment) $this->json(['ok' => false, 'message' => 'Comment not found.'], 404);
+        if ((int)$comment['user_id'] !== $userId) {
+            $this->json(['ok' => false, 'message' => 'You can only change your own comments.'], 403);
         }
-        if ((int) $comment['user_id'] !== $userId) {
-            return $this->respond(['error' => 'Not allowed.'], 403);
-        }
-
-        $this->commentModel->delete((int) $commentId);
-        $this->respond(['message' => 'Comment deleted.']);
+        return $comment;
     }
 
-    /* ---------- helpers ---------- */
-
-    /** Returns the logged-in user's id or stops with 401. */
-    private function requireLogin()
+    private function validContent(): string
     {
-        if (empty($_SESSION['user_id'])) {
-            $this->respond(['error' => 'Please log in first.'], 401);
-            exit;
+        $content = trim((string)($_POST['content'] ?? ''));
+        if ($content === '') {
+            $this->json(['ok' => false, 'message' => 'Comment cannot be empty.'], 422);
         }
-        return (int) $_SESSION['user_id'];
+        if (mb_strlen($content) > 500) {
+            $this->json(['ok' => false, 'message' => 'Comment is too long (max 500 characters).'], 422);
+        }
+        return $content;
     }
 
-    /** Sends a JSON response. Swap for a view() call if you render pages. */
-    private function respond(array $data, int $status = 200)
+    private function present(array $c): array
     {
-        http_response_code($status);
-        header('Content-Type: application/json');
-        echo json_encode($data);
+        return [
+            'id'         => (int)$c['id'],
+            'post_id'    => (int)$c['post_id'],
+            'content'    => $c['content'],
+            'username'   => $c['username'],
+            'full_name'  => $c['full_name'],
+            'avatar'     => upload_url($c['profile_image'], 'profiles'),
+            'profile_url'=> url('/profile/' . rawurlencode($c['username'])),
+            'time'       => time_ago($c['created_at']),
+            'edited'     => strtotime($c['updated_at']) - strtotime($c['created_at']) > 1,
+            'is_mine'    => (int)$c['user_id'] === $this->userId(),
+        ];
     }
 }

@@ -1,52 +1,64 @@
 <?php
-require_once __DIR__ . '/Model.php';
+declare(strict_types=1);
 
-class CommentModel extends Model {
-    public function create(int $postId, int $userId, string $content): bool {
-        $stmt = $this -> db() -> prepare(
-            'INSERT INTO comments (post_id, user_id, content) VALUES (:post_id, :user_id, :content)'
-        );
-        $stmt -> execute([':post_id' => $postId, ':user_id' => $userId, ':content' => $content]);
-        return $stmt -> rowCount() > 0;
+class CommentModel extends Model
+{
+    private PDO $db;
+    public function __construct() { $this->db = Database::connection(); }
+
+    public function postExists(int $postId): bool
+    {
+        $s = $this->db->prepare('SELECT 1 FROM posts WHERE id = ?');
+        $s->execute([$postId]);
+        return (bool)$s->fetchColumn();
     }
 
-    public function findById(int $id): ?array {
-        $stmt = $this -> db() -> prepare(
-            'SELECT c.*, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = :id'
+    public function getByPost(int $postId): array
+    {
+        $s = $this->db->prepare(
+            'SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, c.updated_at,
+                    u.username, u.full_name, u.profile_image
+             FROM comments c JOIN users u ON u.id = c.user_id
+             WHERE c.post_id = ? ORDER BY c.created_at ASC, c.id ASC'
         );
-        $stmt -> execute([':id' => $id]);
-        return $stmt -> fetch() ?: null;
+        $s->execute([$postId]);
+        return $s->fetchAll();
     }
 
-    public function getByPost(int $postId): array {
-        $stmt = $this -> db() -> prepare(
-            'SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = :post_id ORDER BY c.created_at ASC'
+    public function find(int $id): array|false
+    {
+        $s = $this->db->prepare(
+            'SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, c.updated_at,
+                    u.username, u.full_name, u.profile_image
+             FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?'
         );
-        $stmt -> execute([':post_id' => $postId]);
-        return $stmt -> fetchAll();
+        $s->execute([$id]);
+        return $s->fetch();
     }
 
-    public function countByPost(int $postId): int {
-        $stmt = $this -> db() -> prepare(
-            'SELECT COUNT(*) FROM comments WHERE post_id = :post_id'
-        );
-        $stmt -> execute([':post_id' => $postId]);
-        return (int) $stmt -> fetchColumn();
+    public function countByPost(int $postId): int
+    {
+        $s = $this->db->prepare('SELECT COUNT(*) FROM comments WHERE post_id = ?');
+        $s->execute([$postId]);
+        return (int)$s->fetchColumn();
     }
 
-    public function update(int $id, int $userId, string $content): bool {
-        $stmt = $this -> db() -> prepare(
-            'UPDATE comments SET content = :content WHERE id = :id AND user_id = :user_id'
-        );
-        $stmt -> execute([':content' => $content, ':id' => $id, ':user_id' => $userId]);
-        return $stmt -> rowCount() > 0;
+    public function create(int $postId, int $userId, string $content): int
+    {
+        $s = $this->db->prepare('INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)');
+        $s->execute([$postId, $userId, $content]);
+        return (int)$this->db->lastInsertId();
     }
 
-    public function delete(int $id, int $userId,): bool {
-        $stmt = $this -> db() -> prepare(
-            'DELETE FROM comments WHERE id = :id AND user_id = :user_id'
-        );
-        $stmt -> execute([':id' => $id, ':user_id' => $userId]);
-        return $stmt -> rowCount() > 0;
+    public function update(int $id, string $content): void
+    {
+        $s = $this->db->prepare('UPDATE comments SET content = ? WHERE id = ?');
+        $s->execute([$content, $id]);
+    }
+
+    public function delete(int $id): void
+    {
+        $s = $this->db->prepare('DELETE FROM comments WHERE id = ?');
+        $s->execute([$id]);
     }
 }

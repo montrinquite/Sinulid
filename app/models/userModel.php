@@ -1,72 +1,91 @@
 <?php
-require_once __DIR__ . '/Model.php';
+declare(strict_types=1);
 
-class userModel extends Model {
-    public function create(string $username, string $email, string $passwordHash): int {
-        $stmt = $this -> db() -> prepare(
-            'INSERT INTO users (username, email, password_hash) VALUES (:username, :email, :hash)'
+class UserModel extends Model
+{
+    private PDO $db;
+    public function __construct() { $this->db = Database::connection(); }
+
+    public function findById(int $id): array|false
+    {
+        $s = $this->db->prepare('SELECT id, username, email, full_name, bio, profile_image, created_at FROM users WHERE id = ?');
+        $s->execute([$id]);
+        return $s->fetch();
+    }
+
+    public function findByLogin(string $identifier): array|false
+    {
+        $s = $this->db->prepare('SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1');
+        $s->execute([$identifier, strtolower($identifier)]);
+        return $s->fetch();
+    }
+
+    public function findByUsername(string $username): array|false
+    {
+        $s = $this->db->prepare('SELECT id, username, email, full_name, bio, profile_image, created_at FROM users WHERE username = ?');
+        $s->execute([$username]);
+        return $s->fetch();
+    }
+
+    public function emailExists(string $email): bool
+    {
+        $s = $this->db->prepare('SELECT 1 FROM users WHERE email = ?');
+        $s->execute([$email]);
+        return (bool)$s->fetchColumn();
+    }
+
+    public function usernameExists(string $username): bool
+    {
+        $s = $this->db->prepare('SELECT 1 FROM users WHERE username = ?');
+        $s->execute([$username]);
+        return (bool)$s->fetchColumn();
+    }
+
+    public function create(string $username, string $email, string $passwordHash, string $fullName): int
+    {
+        $s = $this->db->prepare('INSERT INTO users (username, email, password, full_name) VALUES (?, ?, ?, ?)');
+        $s->execute([$username, $email, $passwordHash, $fullName]);
+        return (int)$this->db->lastInsertId();
+    }
+
+    public function updateProfile(int $id, string $fullName, ?string $bio, ?string $image = null, bool $clearImage = false): void
+    {
+        if ($clearImage) {
+            $s = $this->db->prepare('UPDATE users SET full_name = ?, bio = ?, profile_image = NULL WHERE id = ?');
+            $s->execute([$fullName, $bio, $id]);
+        } elseif ($image !== null) {
+            $s = $this->db->prepare('UPDATE users SET full_name = ?, bio = ?, profile_image = ? WHERE id = ?');
+            $s->execute([$fullName, $bio, $image, $id]);
+        } else {
+            $s = $this->db->prepare('UPDATE users SET full_name = ?, bio = ? WHERE id = ?');
+            $s->execute([$fullName, $bio, $id]);
+        }
+    }
+
+    public function search(string $q, int $limit = 20): array
+    {
+        $like = '%' . $q . '%';
+        $s = $this->db->prepare(
+            'SELECT id, username, full_name, bio, profile_image FROM users
+             WHERE full_name LIKE :q1 OR username LIKE :q2
+             ORDER BY (username = :exact) DESC, full_name ASC LIMIT :lim'
         );
-        $stmt -> execute(['username' => $username, 'email' => $email, 'hash' => $passwordHash]);
-        return (int) $this -> db() -> lastInsertId(); 
+        $s->bindValue(':q1', $like);
+        $s->bindValue(':q2', $like);
+        $s->bindValue(':exact', $q);
+        $s->bindValue(':lim', $limit, PDO::PARAM_INT);
+        $s->execute();
+        return $s->fetchAll();
     }
 
-    public function findById(int $id): ?array {
-        $stmt = $this -> db() -> prepare(
-            'SELECT id, email, created_at FROM users WHERE id = :id'
-            );
-        $stmt -> execute([':id' => $id]);
-        return $stmt -> fetch() ?: null;
-    }
-
-    public function findByEmail(string $email): ?array {
-        $stmt = $this -> db() -> prepare(
-            'SELECT * FROM users WHERE email = :email'
-            );
-        $stmt -> execute([':email' => $email]);
-        return $stmt -> fetch() ?: null;
-    }
-
-    public function findByUsername(string $username): ?array {
-        $stmt = $this -> db() -> prepare(
-            'SELECT * FROM users WHERE username = :username'
+    public function suggested(int $excludeId, int $limit = 4): array
+    {
+        $s = $this->db->prepare(
+            'SELECT id, username, full_name, bio, profile_image FROM users WHERE id <> :id ORDER BY created_at DESC LIMIT :lim'
         );
-        $stmt -> execute([':username'=> $username]);
-        return $stmt -> fetch() ?: null;
-    }
-
-    public function emailExists(string $email): bool {
-        $stmt = $this -> db() -> prepare(
-            'SELECT 1 FROM users WHERE email = :email LIMIT 1'
-        );
-        $stmt -> execute([':email' => $email]);
-        return (bool) $stmt -> fetchColumn();
-    }
-    public function usernameExists(string $username): bool {
-        $stmt = $this -> db() -> prepare(
-            'SELECT 1 FROM users WHERE username = :username LIMIT 1'
-        );
-        $stmt -> execute([':username' => $username]);
-        return (bool) $stmt -> fetchColumn();
-    }
-
-    public function update( string $id, string $username, string $email): bool {
-        $stmt = $this -> db() -> prepare(
-            'UPDATE users SET username = :username, email = :email WHERE id = :id'
-        );
-        return $stmt -> execute([':username' => $username, ':email' => $email, ':id' => $id]);
-    }
-
-    public function updatePassword(int $id, string $passwordHash): bool {
-        $stmt = $this -> db() -> prepare(
-            'UPDATE users SET password_hash = :hash WHERE id = :id'
-        );
-        return $stmt -> execute ([':hash' => $passwordHash, ':id' => $id]);
-    }
-
-    public function delete(int $id): bool {
-        $stmt = $this -> db() -> prepare(
-            'DELETE FROM users WHERE id = :id'
-        );
-        return $stmt -> execute([':id' => $id]);
+        $s->bindValue(':id', $excludeId, PDO::PARAM_INT);
+        $s->bindValue(':lim', $limit, PDO::PARAM_INT);
+        $s->execute();
+        return $s->fetchAll();
     }
 }

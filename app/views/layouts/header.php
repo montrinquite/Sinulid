@@ -1,29 +1,21 @@
-<?php
-// Variables from render(): $title, $flash, $errors, $old
-$flashClasses = [
-    'success' => 'alert-success',
-    'error'   => 'alert-danger',
-    'warning' => 'alert-warning',
-    'info'    => 'alert-info',
-];
-?>
-<!DOCTYPE html>
-<html lang="en">
+<?php /** @var ?array $currentUser */ /** @var string $csrf */ ?>
+<!doctype html>
+<html lang="en" data-bs-theme="light">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= e($title ?? 'Social App') ?></title>
+    <meta name="csrf" content="<?= e($csrf) ?>">
+    <title><?= e(($title ?? 'Threadly') . ' • Threadly') ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Optional: <link href="<?= e(url('/assets/css/style.css')) ?>" rel="stylesheet"> -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="<?= e(asset('css/style.css')) ?>" rel="stylesheet">
+    <script>try{var t=localStorage.getItem('threadly-theme');if(t){document.documentElement.setAttribute('data-bs-theme',t);}}catch(e){}</script>
 </head>
-<body class="bg-light">
-
-<?php require APP . '/views/layouts/nav.php'; ?>
-
-<main class="container py-4">
-    <?php if (!empty($flash)): ?>
-        <div class="alert <?= e($flashClasses[$flash['type']] ?? 'alert-info') ?> alert-dismissible fade show" role="alert">
-            <?= e($flash['message']) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    <?php endif; ?>
+<body data-base="<?= e(BASE_URL) ?>" class="<?= $currentUser ? 'is-auth' : 'is-guest' ?>">
+    <a class="visually-hidden-focusable skip-link" href="#main">Skip to content</a>
+    <?php
+    if ($currentUser) {
+        require BASE_PATH . '/app/views/layouts/navigation.php';
+    } else {
+    echo '<main id="main" class="auth-wrap">';
+    }

@@ -1,70 +1,91 @@
 <?php
-require_once __DIR__ . '/Model.php';
+declare(strict_types=1);
 
-class postModel extends Model {
-    public function create(int $userId, string $content) {
-        $stmt = $this -> db() -> prepare(
-            'INSERT INTO posts (user_id, content)'
-        );
-        $stmt -> execute([':user_id' => $userId, 'content'=> $content]);
-        return (int) $this -> db() -> lastInsertId();
+class PostModel extends Model
+{
+    private PDO $db;
+    public function __construct() { $this->db = Database::connection(); }
+
+    private const SELECT = 'SELECT p.id, p.user_id, p.content, p.image, p.created_at, p.updated_at,
+            u.username, u.full_name, u.profile_image,
+            (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
+            (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
+            EXISTS(SELECT 1 FROM likes lm WHERE lm.post_id = p.id AND lm.user_id = :viewer) AS liked_by_me
+        FROM posts p JOIN users u ON u.id = p.user_id';
+
+    public function feed(int $viewerId, int $limit, int $offset, string $sort = 'latest', ?int $authorId = null, ?string $keyword = null): array
+    {
+        $where = [];
+        if ($authorId !== null) $where[] = 'p.user_id = :author';
+        if ($keyword !== null && $keyword !== '') $where[] = 'p.content LIKE :kw';
+        $order = $sort === 'top' ? 'like_count DESC, p.created_at DESC, p.id DESC' : 'p.created_at DESC, p.id DESC';
+
+        $sql = self::SELECT . ($where ? ' WHERE ' . implode(' AND ', $where) : '') . " ORDER BY {$order} LIMIT :lim OFFSET :off";
+        $s = $this->db->prepare($sql);
+        $s->bindValue(':viewer', $viewerId, PDO::PARAM_INT);
+        if ($authorId !== null) $s->bindValue(':author', $authorId, PDO::PARAM_INT);
+        if ($keyword !== null && $keyword !== '') $s->bindValue(':kw', '%' . $keyword . '%');
+        $s->bindValue(':lim', $limit, PDO::PARAM_INT);
+        $s->bindValue(':off', $offset, PDO::PARAM_INT);
+        $s->execute();
+        return $s->fetchAll();
     }
 
-    public function findById(int $id): ?array {
-        $stmt = $this -> db() -> prepare($this -> baseSelect() . 'WHERE p.id = :id');
-        $stmt -> execute ([':id' => $id]);
-        return $stmt -> fetch() ?: null;
+    public function find(int $id, int $viewerId): array|false
+    {
+        $s = $this->db->prepare(self::SELECT . ' WHERE p.id = :id');
+        $s->bindValue(':viewer', $viewerId, PDO::PARAM_INT);
+        $s->bindValue(':id', $id, PDO::PARAM_INT);
+        $s->execute();
+        return $s->fetch();
     }
 
-    public function getAll(int $limit = 10, int $offset = 0): array {
-        $stmt = $this -> db() -> prepare(
-            $this -> baseSelect() . 'ORDER BY p.created_at DESC LIMIT :limit OFFSET :offset'
-        );
-        $stmt -> bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt -> bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt -> execute();
-        return $stmt -> fetchAll();
+    public function exists(int $id): bool
+    {
+        $s = $this->db->prepare('SELECT 1 FROM posts WHERE id = ?');
+        $s->execute([$id]);
+        return (bool)$s->fetchColumn();
     }
 
-    public function getByUser(int $userId, int $limit = 10, int $offset = 0): array {
-        $stmt = $this -> db() -> prepare(
-            $this -> baseSelect() . 'WHERE p.user_id = :user_id ORDER BY p.created_at DESC LIMIT :limit OFFSET :offset'
-        );
-        $stmt -> bindValue(':user_id', $userId, PDO::PARAM_INT);
-        $stmt -> bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt -> bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt -> execute();
-        return $stmt -> fetchAll();
+    public function countByUser(int $userId): int
+    {
+        $s = $this->db->prepare('SELECT COUNT(*) FROM posts WHERE user_id = ?');
+        $s->execute([$userId]);
+        return (int)$s->fetchColumn();
     }
 
-    public function count(): int {
-        return (int) $this -> db() -> query('SELECT COUNT * FROM posts') -> fetchColumn();
+    public function create(int $userId, string $content, ?string $image): int
+    {
+        $s = $this->db->prepare('INSERT INTO posts (user_id, content, image) VALUES (?, ?, ?)');
+        $s->execute([$userId, $content, $image]);
+        return (int)$this->db->lastInsertId();
     }
 
-    public function update(int $id, int $userId, string $content): bool {
-        $stmt = $this -> db() -> prepare(
-            'UPDATE posts SET content = :content WHERE id = :id AND user_id = :user_id'
-        );
-        $stmt -> execute([':content' => $content, ':id' => $id, ':user_id' => $userId]);
-        return $stmt -> rowCount() > 0;
+    public function update(int $id, string $content, ?string $image = null, bool $clearImage = false): void
+    {
+        if ($clearImage) {
+            $s = $this->db->prepare('UPDATE posts SET content = ?, image = NULL WHERE id = ?');
+            $s->execute([$content, $id]);
+        } elseif ($image !== null) {
+            $s = $this->db->prepare('UPDATE posts SET content = ?, image = ? WHERE id = ?');
+            $s->execute([$content, $image, $id]);
+        } else {
+            $s = $this->db->prepare('UPDATE posts SET content = ? WHERE id = ?');
+            $s->execute([$content, $id]);
+        }
     }
 
-    public function delete(int $id, int $userId): bool {
-        $stmt = $this -> db() -> prepare(
-            'DELETE FROM posts WHERE id = :id AND user_id = :user_id'
-        );
-        $stmt -> execute([':id' => $id, ':user_id' => $userId]);
-        return $stmt -> rowCount() > 0;
-    }
-
-    public function getOwnerId(int $id): ?int {
-        $stmt = $this -> db() -> prepare('SELECT user_id FROM posts WHERE id = :id');
-        $stmt -> execute([':id' =>  $id]);
-        $v = $stmt -> fetchColumn();
-        return $v === false? null : (int) $v;
-    }
-
-    private function baseSelect(): string {
-        return 'SELECT p.id, p.user_id, p.content, p.create_at, u.username, (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count, (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count FROM post p JOIN users u ON u.id = p.user_id';
+    public function delete(int $id): void
+    {
+        $this->db->beginTransaction();
+        try {
+            $this->db->prepare('DELETE FROM likes WHERE post_id = ?')->execute([$id]);
+            $this->db->prepare('DELETE FROM comments WHERE post_id = ?')->execute([$id]);
+            $this->db->prepare('DELETE FROM posts WHERE id = ?')->execute([$id]);
+            $this->db->commit();
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
 }
