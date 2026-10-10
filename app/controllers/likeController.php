@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-rod pangit
-=======
 <?php
 
 class LikeController extends Controller
@@ -14,6 +11,7 @@ class LikeController extends Controller
         $this->posts = new PostModel();
     }
 
+    /** POST /posts/{id}/like : like the post, or unlike it if already liked */
     public function likes(int $postId): void
     {
         $user = $this->requireAuth();
@@ -29,7 +27,7 @@ class LikeController extends Controller
             $this->likes->add($postId, $user['id']);
         }
 
+        // Back to the feed, profile or post page the click came from.
         $this->redirectBack("/posts/$postId");
     }
 }
->>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85

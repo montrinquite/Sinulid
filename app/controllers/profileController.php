@@ -15,10 +15,7 @@ class ProfileController extends Controller
         $this->likes = new LikeModel();
     }
 
-<<<<<<< HEAD
     /** GET /profile/{id} : public profile with the user's posts */
-=======
->>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function showProf(int $id): void
     {
         $profile = $this->users->findById($id);
@@ -46,20 +43,14 @@ class ProfileController extends Controller
         ], $profile['username']);
     }
 
-<<<<<<< HEAD
     /** GET /profile/edit */
-=======
->>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function profEdit(): void
     {
         $me = $this->requireAuth();
         $this->render('profile/edit', ['profile' => $this->users->findById($me['id'])], 'Edit profile');
     }
 
-<<<<<<< HEAD
     /** POST /profile/edit : change username and email */
-=======
->>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function profUpd(): void
     {
         $me = $this->requireAuth();
@@ -98,20 +89,14 @@ class ProfileController extends Controller
         $this->redirect('/profile/' . $me['id']);
     }
 
-<<<<<<< HEAD
     /** GET /profile/password */
-=======
->>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function changePass(): void
     {
         $this->requireAuth();
         $this->render('profile/password', [], 'Change password');
     }
 
-<<<<<<< HEAD
     /** POST /profile/password */
-=======
->>>>>>> 51d018d63b7c2545946a8a2512896a281df79c85
     public function updPass(): void
     {
         $me = $this->requireAuth();
